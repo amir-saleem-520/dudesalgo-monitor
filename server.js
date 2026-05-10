@@ -16,10 +16,11 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 // ─── Middleware ───────────────────────────────────────────────
-app.use(cors());
-app.use(express.json({ limit: '5mb' }));
-app.use(express.static(path.join(__dirname, 'public'))); // Serve dashboard
-
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'X-API-Key', 'Authorization']
+}));
 // ─── MongoDB Connection ───────────────────────────────────────
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/dudesalgo_monitor')
   .then(() => console.log('✅ MongoDB connected'))
