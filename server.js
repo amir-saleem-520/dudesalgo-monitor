@@ -1,4 +1,4 @@
-const express  = require('express');
+gitconst express  = require('express');
 const mongoose = require('mongoose');
 const cors     = require('cors');
 
@@ -456,5 +456,37 @@ async function runStrategyAnalysis(accountLogin){
   const aiSummary=strategies.map(s=>`Magic ${s.magic}: ${s.strategyType} on ${s.symbols.join('/')} — ${s.performance.winRate}% win rate, PF ${s.performance.profitFactor}, ${s.lotPattern} lots (${s.minLot}→${s.maxLot}), ${s.basketClose?'basket close detected':'individual closes'}, ${s.bias}, active in ${s.sessionName}.`).join('\n\n');
   await Strategy.create({accountLogin,strategies,performanceSummary:{totalTrades:trades.length,totalPnL:strategies.reduce((s,st)=>s+parseFloat(st.performance.totalPnL),0).toFixed(2)},aiSummary});
 }
+
+// ═══════════════════════════════════════════════════════════════
+// POST /api/history  —  receives closed trade history separately
+// This keeps request sizes small (split from /api/report)
+// ═══════════════════════════════════════════════════════════════
+app.post('/api/history', requireApiKey, async(req,res)=>{
+  try{
+    const body = req.body;
+    if(!body?.accountLogin) return res.status(400).json({error:'No accountLogin'});
+    const { accountLogin, closedTrades=[] } = body;
+    let saved = 0;
+    for(const trade of closedTrades){
+      try{
+        await Trade.create({
+          accountLogin, ticket:trade.ticket, symbol:trade.symbol,
+          type:trade.type, lots:trade.lots, price:trade.price,
+          profit:trade.profit, swap:trade.swap, commission:trade.commission,
+          magic:trade.magic, comment:trade.comment,
+          time:new Date(trade.time*1000)
+        });
+        saved++;
+      }catch(e){ /* duplicate — skip */ }
+    }
+    // Run basket detection + strategy on new trades
+    if(saved > 0) runStrategyAnalysis(accountLogin).catch(console.error);
+    console.log(`📜 History #${accountLogin} | Received:${closedTrades.length} | New:${saved}`);
+    res.json({ status:'ok', saved, received:closedTrades.length });
+  }catch(err){
+    console.error('History error:',err.message);
+    res.status(500).json({error:err.message});
+  }
+});
 
 app.listen(PORT,()=>console.log(`\n✅ Dude's Algo Monitor LIVE on port ${PORT}\n`));
